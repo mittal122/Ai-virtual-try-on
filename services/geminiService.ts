@@ -1,6 +1,33 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import type { GenerateImageProps, ImageData } from '../types';
 
+const handleGeminiError = (error: unknown, context: string): Error => {
+  console.error(`Gemini API Error (${context}):`, error);
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const errorMessage = (error as { message: string }).message;
+    if (errorMessage.includes('429') || /quota/i.test(errorMessage)) {
+      return new Error('API request limit exceeded. Please wait a minute and try again.');
+    }
+    if (/safety/i.test(errorMessage)) {
+       return new Error('The request was blocked for safety reasons. Please try a different input.');
+    }
+  }
+  
+  const userFriendlyContext = context.replace(/([A-Z])/g, ' $1').toLowerCase();
+
+  // Provide specific fallbacks for key functions
+  if (context === 'renderProductForTryOn') {
+    return new Error('Failed to render product. The image might be unclear or unsupported.');
+  }
+  if (context === 'generateTryOnImage') {
+    return new Error('Failed to generate image. Please try again.');
+  }
+  
+  return new Error(`Failed to ${userFriendlyContext}. Please try again.`);
+};
+
+
 export const generateTryOnImage = async ({
   userFace,
   productImage,
@@ -83,8 +110,7 @@ export const generateTryOnImage = async ({
     }
     throw new Error('No image data found in the API response.');
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw new Error('Failed to generate image. Please try again.');
+    throw handleGeminiError(error, 'generateTryOnImage');
   }
 };
 
@@ -127,8 +153,7 @@ export const generateCreativePose = async (
     
     return scene;
   } catch (error) {
-    console.error("Gemini API Error (generateCreativePose):", error);
-    throw new Error('Failed to generate creative pose. Please try again.');
+    throw handleGeminiError(error, 'generateCreativePose');
   }
 };
 
@@ -171,8 +196,7 @@ export const generateCreativeBackground = async (
     
     return scene;
   } catch (error) {
-    console.error("Gemini API Error (generateCreativeBackground):", error);
-    throw new Error('Failed to generate creative background. Please try again.');
+    throw handleGeminiError(error, 'generateCreativeBackground');
   }
 };
 
@@ -194,8 +218,7 @@ export const describePoseFromImage = async (poseImage: ImageData): Promise<strin
 
     return response.text.trim();
   } catch (error) {
-    console.error("Gemini API Error (describePoseFromImage):", error);
-    throw new Error('Failed to describe pose from image. Please try again.');
+    throw handleGeminiError(error, 'describePoseFromImage');
   }
 };
 
@@ -216,8 +239,7 @@ export const describeBackgroundFromImage = async (backgroundImage: ImageData): P
 
     return response.text.trim();
   } catch (error) {
-    console.error("Gemini API Error (describeBackgroundFromImage):", error);
-    throw new Error('Failed to describe background from image. Please try again.');
+    throw handleGeminiError(error, 'describeBackgroundFromImage');
   }
 };
 
@@ -247,7 +269,29 @@ export const renderProductForTryOn = async (productImage: ImageData): Promise<st
     }
     throw new Error('No image data found in the API response for product rendering.');
   } catch (error) {
-    console.error("Gemini API Error (renderProductForTryOn):", error);
-    throw new Error('Failed to render product. The image might be unclear or unsupported.');
+    throw handleGeminiError(error, 'renderProductForTryOn');
+  }
+};
+
+export const checkApiStatus = async (): Promise<{ status: 'operational' | 'error'; message: string }> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // A lightweight, fast model for a simple ping.
+    await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'ping' });
+    return { status: 'operational', message: 'API Status: Operational' };
+  } catch (error) {
+    console.error("API Status Check Failed:", error);
+    let errorMessage = 'API Status: Connection Failed';
+    
+    if (error && typeof error === 'object' && 'message' in error) {
+        const message = (error as { message: string }).message;
+        if (message.includes('API key not valid')) {
+            errorMessage = 'API Status: Invalid API Key';
+        } else if (message.includes('429') || /quota/i.test(message)) {
+            errorMessage = 'API Status: Quota Exceeded';
+        }
+    }
+    
+    return { status: 'error', message: errorMessage };
   }
 };

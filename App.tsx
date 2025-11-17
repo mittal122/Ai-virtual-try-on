@@ -3,10 +3,12 @@ import { ImageUploader } from './components/ImageUploader';
 import { PoseSelector } from './components/PoseSelector';
 import { BackgroundSelector } from './components/BackgroundSelector';
 import { GalleryModal } from './components/GalleryModal';
+import { StatusBar } from './components/StatusBar';
+import type { ApiStatus } from './components/StatusBar';
 import { UserIcon, ShirtIcon, DownloadIcon, SpinnerIcon, SparklesIcon, BodyPoseIcon, SunIcon, MoonIcon, GalleryIcon, SaveIcon, PantsIcon, DressIcon } from './components/icons';
 import { MODEL_POSES, BACKGROUND_OPTIONS } from './constants';
 import type { ImageState, Pose, BackgroundOption } from './types';
-import { generateTryOnImage, generateCreativePose, generateCreativeBackground, describePoseFromImage, describeBackgroundFromImage, renderProductForTryOn } from './services/geminiService';
+import { generateTryOnImage, generateCreativePose, generateCreativeBackground, describePoseFromImage, describeBackgroundFromImage, renderProductForTryOn, checkApiStatus } from './services/geminiService';
 
 const initialImageState: ImageState = {
   file: null,
@@ -89,8 +91,21 @@ function App() {
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [activeUploader, setActiveUploader] = useState<string>('face');
+  const [apiStatus, setApiStatus] = useState<{ status: ApiStatus; message: string }>({
+    status: 'checking',
+    message: 'Checking API Status...',
+  });
 
   const isMultiVariation = numVariations > 1;
+
+  // API Status Check on load
+  useEffect(() => {
+    const verifyApiStatus = async () => {
+        const result = await checkApiStatus();
+        setApiStatus(result);
+    };
+    verifyApiStatus();
+  }, []);
 
   // Load gallery from localStorage on initial load
   useEffect(() => {
@@ -814,6 +829,7 @@ function App() {
         onDelete={handleDeleteFromGallery}
         onClearAll={handleClearGallery}
       />
+      <StatusBar status={apiStatus.status} message={apiStatus.message} />
     </div>
   );
 }
